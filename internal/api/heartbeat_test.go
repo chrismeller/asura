@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -226,5 +227,29 @@ func TestHeartbeatAPIUnderBasePath(t *testing.T) {
 	w := env.do("POST", "/asura/api/v1/monitors/"+strconv.FormatInt(id, 10)+"/heartbeat/regenerate", "", admin)
 	if w.Code != http.StatusOK {
 		t.Fatalf("regenerate under base path: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// A clone whose heartbeat cannot be created must not look like a success
+// without a token: it reports the failure and how to get a token.
+func TestHeartbeatAPICloneReportsHeartbeatFailure(t *testing.T) {
+	env := newTestEnv(t, nil, false, nil)
+	id, _ := createHeartbeatMonitor(t, env, "")
+
+	db, err := sql.Open("sqlite", "file:"+env.dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TRIGGER fail_heartbeat_insert BEFORE INSERT ON heartbeats BEGIN SELECT RAISE(ABORT, 'injected failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	w := env.do("POST", "/api/v1/monitors/"+strconv.FormatInt(id, 10)+"/clone", "", admin)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("clone with failing heartbeat: %d %s, want 500", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "/heartbeat/regenerate") {
+		t.Errorf("error does not say how to get a token: %s", w.Body.String())
 	}
 }

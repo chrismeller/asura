@@ -386,16 +386,25 @@ func (h *Handler) CloneMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var heartbeat *storage.Heartbeat
+	var heartbeatErr error
 	if clone.Type == "heartbeat" {
 		// The clone gets its own token: sharing the source's would make one
 		// ping count for both monitors.
-		heartbeat, _ = h.createHeartbeat(ctx, clone)
+		heartbeat, heartbeatErr = h.createHeartbeat(ctx, clone)
 	}
 
 	h.audit(r, "clone", "monitor", clone.ID, fmt.Sprintf("from=%d", id))
 
 	if h.pipeline != nil {
 		h.pipeline.ReloadMonitors()
+	}
+
+	// The clone exists either way; say so, so the client does not clone again
+	// and can get the token through regenerate instead.
+	if heartbeatErr != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf(
+			"monitor cloned as id %d, but creating its heartbeat failed; call POST /api/v1/monitors/%d/heartbeat/regenerate to get a ping token", clone.ID, clone.ID))
+		return
 	}
 
 	if heartbeat != nil {
