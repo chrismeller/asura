@@ -238,7 +238,7 @@ func RequestLogListPage(p RequestLogParams) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			for _, g := range []string{"web", "api", "badge", "auth", "status"} {
+			for _, g := range []string{"web", "api", "heartbeat", "badge", "auth", "status"} {
 				{
 					templ_7745c5c3_ElementWriter := templ_7745c5c3_Buffer
 					templ_7745c5c3_Buffer := templ.GetBuffer()

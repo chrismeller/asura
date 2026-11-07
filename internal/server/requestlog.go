@@ -20,6 +20,15 @@ const (
 	requestLogFlushInterval = 5 * time.Second
 )
 
+// heartbeatPathPrefix is the heartbeat ping route; the segment after it is the
+// monitor's secret token.
+const heartbeatPathPrefix = "/api/v1/heartbeat/"
+
+// heartbeatDigestLen is how many hex characters of sha256(token) a logged
+// heartbeat path keeps: enough to group pings per monitor, too few to be
+// used as the token or to identify it outside this database.
+const heartbeatDigestLen = 12
+
 var _monitorIDRe = regexp.MustCompile(`(?:^/monitors/|^/api/v1/monitors/|^/api/v1/badge/)(\d+)`)
 
 type RequestLogWriter struct {
@@ -113,6 +122,13 @@ func requestLogMiddleware(writer *RequestLogWriter, basePath string, trustedNets
 
 			ip := httputil.ExtractIP(r, trustedNets)
 
+			// Heartbeat tokens are stored only as sha256 digests, so the
+			// plaintext must not reach request_logs either.
+			if redacted, ok := redactHeartbeatPath(trimmed); ok {
+				trimmed = redacted
+				path = basePath + redacted
+			}
+
 			log := &storage.RequestLog{
 				Method:     r.Method,
 				Path:       path,
@@ -148,8 +164,21 @@ func shouldSkipLog(path, basePath string) bool {
 	return false
 }
 
+// redactHeartbeatPath replaces the token in a heartbeat ping path (with the
+// base path already stripped) by "sha256:" and a prefix of the token's
+// at-rest digest, which matches the start of heartbeats.token.
+func redactHeartbeatPath(path string) (string, bool) {
+	token, ok := strings.CutPrefix(path, heartbeatPathPrefix)
+	if !ok || token == "" {
+		return path, false
+	}
+	return heartbeatPathPrefix + "sha256:" + storage.HashToken(token)[:heartbeatDigestLen], true
+}
+
 func classifyRoute(path string) string {
 	switch {
+	case strings.HasPrefix(path, heartbeatPathPrefix):
+		return "heartbeat"
 	case strings.HasPrefix(path, "/api/v1/badge/"):
 		return "badge"
 	case strings.HasPrefix(path, "/api/v1/"):

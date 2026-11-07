@@ -232,6 +232,13 @@ func (s *SQLiteStore) EnsureKDFSalt(ctx context.Context) ([]byte, error) {
 	return salt, nil
 }
 
+// HashToken returns the at-rest digest of an agent or heartbeat token: the
+// sha256-hex value stored in the agents and heartbeats tables. Callers outside
+// storage use it to refer to a token without keeping the plaintext.
+func HashToken(token string) string {
+	return sha256Hex(token)
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])

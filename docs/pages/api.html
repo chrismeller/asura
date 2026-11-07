@@ -320,6 +320,8 @@
 
 <p>The <code>from</code> and <code>to</code> filters take RFC 3339 timestamps.</p>
 
+<p><code>group</code> values: <code>web</code>, <code>api</code>, <code>heartbeat</code>, <code>badge</code>, <code>auth</code>, <code>metrics</code>, <code>status</code>. Heartbeat pings are logged without their token: the path ends in <code>sha256:</code> and the first 12 hex characters of the token's sha256 digest, so pings from one monitor share a path.</p>
+
 <h2>Audit Log</h2>
 
 <table>

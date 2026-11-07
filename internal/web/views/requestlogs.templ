@@ -65,7 +65,7 @@ templ RequestLogListPage(p RequestLogParams) {
 			<nav class="flex flex-wrap gap-1" aria-label="Route group">
 				<a href={ templ.SafeURL(p.href(p.TimeRange, "", p.ClientIP, 1)) }
 					class={ "filter-tab", templ.KV("filter-active", p.Filter == ""), templ.KV("filter-inactive", p.Filter != "") }>All</a>
-				for _, g := range []string{"web", "api", "badge", "auth", "status"} {
+				for _, g := range []string{"web", "api", "heartbeat", "badge", "auth", "status"} {
 					<a href={ templ.SafeURL(p.href(p.TimeRange, g, p.ClientIP, 1)) }
 						class={ "filter-tab", templ.KV("filter-active", p.Filter == g), templ.KV("filter-inactive", p.Filter != g) }>{ routeGroupLabel(g) }</a>
 				}
