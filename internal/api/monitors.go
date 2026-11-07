@@ -2,10 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -132,7 +129,7 @@ func (h *Handler) CreateMonitor(w http.ResponseWriter, r *http.Request) {
 	if heartbeat != nil {
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"monitor":   m,
-			"heartbeat": heartbeat,
+			"heartbeat": heartbeatWithToken{Heartbeat: heartbeat, Token: heartbeat.Token},
 		})
 		return
 	}
@@ -182,6 +179,10 @@ func (h *Handler) UpdateMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	checker.ClearOAuth2TokenCache(m.ID)
+
+	if err := storage.SyncHeartbeatOnUpdate(r.Context(), h.store, existing.Type, &m); err != nil {
+		h.logger.Error("sync heartbeat", "error", err)
+	}
 
 	if err := h.store.SetMonitorNotificationChannels(r.Context(), m.ID, m.NotificationChannelIDs); err != nil {
 		h.logger.Error("set monitor notification channels", "error", err)
@@ -384,8 +385,11 @@ func (h *Handler) CloneMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var heartbeat *storage.Heartbeat
 	if clone.Type == "heartbeat" {
-		h.createHeartbeat(ctx, clone)
+		// The clone gets its own token: sharing the source's would make one
+		// ping count for both monitors.
+		heartbeat, _ = h.createHeartbeat(ctx, clone)
 	}
 
 	h.audit(r, "clone", "monitor", clone.ID, fmt.Sprintf("from=%d", id))
@@ -394,6 +398,13 @@ func (h *Handler) CloneMonitor(w http.ResponseWriter, r *http.Request) {
 		h.pipeline.ReloadMonitors()
 	}
 
+	if heartbeat != nil {
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"monitor":   clone,
+			"heartbeat": heartbeatWithToken{Heartbeat: heartbeat, Token: heartbeat.Token},
+		})
+		return
+	}
 	writeJSON(w, http.StatusCreated, clone)
 }
 
@@ -543,17 +554,24 @@ func (h *Handler) validateAgentIDs(ctx context.Context, ids []int64) error {
 	return nil
 }
 
+// heartbeatWithToken serializes a heartbeat together with its plaintext
+// token. It is only used on responses that just created the token, the one
+// time it can be shown: the store keeps only its hash.
+type heartbeatWithToken struct {
+	*storage.Heartbeat
+	Token string `json:"token"`
+}
+
 func (h *Handler) createHeartbeat(ctx context.Context, m *storage.Monitor) (*storage.Heartbeat, error) {
-	token, err := generateToken()
+	token, err := storage.NewHeartbeatToken()
 	if err != nil {
 		h.logger.Error("generate heartbeat token", "error", err)
 		return nil, fmt.Errorf("generate heartbeat token: %w", err)
 	}
-	grace := parseGraceFromSettings(m.Settings)
 	hb := &storage.Heartbeat{
 		MonitorID: m.ID,
 		Token:     token,
-		Grace:     grace,
+		Grace:     storage.HeartbeatGrace(m.Settings),
 		Status:    "pending",
 	}
 	if err := h.store.CreateHeartbeat(ctx, hb); err != nil {
@@ -563,29 +581,51 @@ func (h *Handler) createHeartbeat(ctx context.Context, m *storage.Monitor) (*sto
 	return hb, nil
 }
 
-func generateToken() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
+// RegenerateHeartbeatToken replaces a heartbeat monitor's token and returns
+// the new one; the old ping URL stops working at once. It also creates the
+// heartbeat for a monitor that has none (one made heartbeat by an edit, or
+// imported), which is how such a monitor gets its first token.
+func (h *Handler) RegenerateHeartbeatToken(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.ParseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	return hex.EncodeToString(b), nil
-}
+	ctx := r.Context()
+	m, err := h.store.GetMonitor(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "monitor not found")
+			return
+		}
+		h.logger.Error("get monitor for heartbeat regenerate", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get monitor")
+		return
+	}
+	if m.Type != "heartbeat" {
+		writeError(w, http.StatusBadRequest, "monitor is not a heartbeat monitor")
+		return
+	}
+	token, err := storage.NewHeartbeatToken()
+	if err != nil {
+		h.logger.Error("generate heartbeat token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+	if err := h.store.SetHeartbeatToken(ctx, id, token, storage.HeartbeatGrace(m.Settings)); err != nil {
+		h.logger.Error("set heartbeat token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to save token")
+		return
+	}
+	h.audit(r, "regenerate_token", "heartbeat", id, "")
 
-func parseGraceFromSettings(settings json.RawMessage) int {
-	if settings == nil {
-		return 0
+	hb, err := h.store.GetHeartbeatByMonitorID(ctx, id)
+	if err != nil {
+		h.logger.Error("get heartbeat after regenerate", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get heartbeat")
+		return
 	}
-	var s map[string]any
-	if err := json.Unmarshal(settings, &s); err != nil {
-		return 0
-	}
-	g, ok := s["grace"]
-	if !ok {
-		return 0
-	}
-	gf, ok := g.(float64)
-	if !ok {
-		return 0
-	}
-	return int(gf)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"heartbeat": heartbeatWithToken{Heartbeat: hb, Token: token},
+	})
 }

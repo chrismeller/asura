@@ -45,6 +45,8 @@ type MonitorDetailParams struct {
 	Tags         []storage.MonitorTag
 	SLA          *SLAData
 	Heatmap      []HeatmapDay
+	// Heartbeat is set for heartbeat monitors only.
+	Heartbeat *HeartbeatView
 }
 
 type SLAData struct {
@@ -465,6 +467,9 @@ templ MonitorDetailPage(p MonitorDetailParams) {
 						@manualStatusButton(p.BasePath, p.Monitor.ID, "down")
 					</div>
 				</div>
+			}
+			if p.Monitor.Type == "heartbeat" && p.Heartbeat != nil {
+				@heartbeatPanel(p)
 			}
 			if p.OpenIncident != nil {
 				<div class="mb-6 px-4 py-3 border border-crit/40 rounded-card bg-surface-50 text-sm flex flex-wrap items-center gap-x-3 gap-y-1" role="status">

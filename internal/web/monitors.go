@@ -77,6 +77,7 @@ var _settingsTargets = map[string]func(*views.MonitorFormParams) any{
 	"postgresql": func(fd *views.MonitorFormParams) any { return &fd.PostgreSQL },
 	"udp":        func(fd *views.MonitorFormParams) any { return &fd.UDP },
 	"http_multi": func(fd *views.MonitorFormParams) any { return &fd.MultiStep },
+	"heartbeat":  func(fd *views.MonitorFormParams) any { return &fd.Heartbeat },
 }
 
 func unmarshalMonitorSettings(fd *views.MonitorFormParams, mon *storage.Monitor) {
@@ -141,6 +142,14 @@ func assertionsToJSON(raw json.RawMessage) string {
 var _settingsAssemblers = map[string]func(*http.Request) json.RawMessage{
 	"http": func(r *http.Request) json.RawMessage {
 		b, _ := json.Marshal(assembleHTTPSettings(r))
+		return b
+	},
+	"heartbeat": func(r *http.Request) json.RawMessage {
+		s := storage.HeartbeatSettings{}
+		if v, err := strconv.Atoi(r.FormValue("settings_heartbeat_grace")); err == nil && v > 0 {
+			s.Grace = v
+		}
+		b, _ := json.Marshal(s)
 		return b
 	},
 	"tcp": func(r *http.Request) json.RawMessage {
@@ -530,8 +539,17 @@ func (h *Handler) MonitorDetail(w http.ResponseWriter, r *http.Request) {
 
 	heatmap := buildHeatmap(ctx, h.store, id, now)
 
+	var hbView *views.HeartbeatView
+	if mon.Type == "heartbeat" {
+		hbView = h.heartbeatView(r, mon)
+		if hbView.NewToken != "" {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+	}
+
 	lp := h.newLayoutParams(r, mon.Name, "monitors")
 	h.renderComponent(w, r, views.MonitorDetailPage(views.MonitorDetailParams{
+		Heartbeat:    hbView,
 		LayoutParams: lp,
 		Monitor:      mon,
 		Checks:       checks,
@@ -729,6 +747,11 @@ func (h *Handler) MonitorCreate(w http.ResponseWriter, r *http.Request) {
 		h.pipeline.ReloadMonitors()
 	}
 
+	if mon.Type == "heartbeat" {
+		h.redirectWithHeartbeatToken(w, r, mon, "Monitor created", assignErr)
+		return
+	}
+
 	if assignErr != "" {
 		h.setError(w, assignErr)
 	} else {
@@ -848,6 +871,10 @@ func (h *Handler) MonitorUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	checker.ClearOAuth2TokenCache(id)
+
+	if err := storage.SyncHeartbeatOnUpdate(r.Context(), h.store, existing.Type, mon); err != nil {
+		h.logger.Error("web: sync heartbeat", "error", err)
+	}
 
 	if err := h.store.SetMonitorNotificationChannels(r.Context(), id, channelIDs); err != nil {
 		h.logger.Error("web: set monitor notification channels", "error", err)
@@ -1049,6 +1076,13 @@ func (h *Handler) MonitorClone(w http.ResponseWriter, r *http.Request) {
 		h.pipeline.ReloadMonitors()
 	}
 
+	// A heartbeat clone gets its own token (sharing the source's would make
+	// one ping count for both), shown once on its detail page.
+	if clone.Type == "heartbeat" {
+		h.redirectWithHeartbeatToken(w, r, clone, "Monitor cloned", assignErr)
+		return
+	}
+
 	if assignErr != "" {
 		h.setError(w, assignErr)
 	} else {
@@ -1201,9 +1235,15 @@ func (h *Handler) parseMonitorForm(r *http.Request) (*storage.Monitor, []int64, 
 		}
 	}
 
-	mon.Settings = parseJSONOrForm(r, "settings", func(r *http.Request) json.RawMessage {
-		return assembleSettings(r, mon.Type)
-	})
+	if mon.Type == "heartbeat" {
+		// Heartbeat settings have no JSON editor (the Settings card is hidden),
+		// so ignore a settings_mode left on "json" by a previously chosen type.
+		mon.Settings = assembleSettings(r, mon.Type)
+	} else {
+		mon.Settings = parseJSONOrForm(r, "settings", func(r *http.Request) json.RawMessage {
+			return assembleSettings(r, mon.Type)
+		})
+	}
 	mon.Assertions = parseJSONOrForm(r, "assertions", func(r *http.Request) json.RawMessage {
 		return assembleAssertions(r)
 	})

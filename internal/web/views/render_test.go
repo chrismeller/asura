@@ -34,6 +34,10 @@ func fixtureMonitor() *storage.Monitor {
 	return &storage.Monitor{ID: 1, Name: "API", Type: "http", Target: "https://example.com", Interval: 60, Timeout: 10, Enabled: true, Status: "up", LastCheckAt: &now, FailureThreshold: 3, SuccessThreshold: 1}
 }
 
+func fixtureHeartbeatMonitor() *storage.Monitor {
+	return &storage.Monitor{ID: 2, Name: "Cron", Type: "heartbeat", Target: "heartbeat", Interval: 3600, Timeout: 10, Enabled: true, Status: "up", FailureThreshold: 1, SuccessThreshold: 1}
+}
+
 func fixtureIncident() *storage.Incident {
 	return &storage.Incident{ID: 1, MonitorID: 1, MonitorName: "API", Status: "open", Severity: "critical", Cause: "timeout", StartedAt: time.Now()}
 }
@@ -46,34 +50,39 @@ func pages(write bool) map[string]templ.Component {
 		return &storage.PaginatedResult{Data: data, Total: 1, Page: 1, PerPage: 20, TotalPages: 2}
 	}
 	lp := func(t string) LayoutParams { return testLayout(t, write) }
+	now := time.Now()
 	return map[string]templ.Component{
 		"dashboard":      DashboardPage(DashboardParams{LayoutParams: lp("Dashboard"), Monitors: []*storage.Monitor{m}, Incidents: []*storage.Incident{inc}, Total: 1, Up: 1, OpenIncidents: 1, Page: 1, TotalPages: 1}),
 		"monitors":       MonitorListPage(MonitorListParams{LayoutParams: lp("Monitors"), Result: paged([]*storage.Monitor{m}), Groups: []*storage.MonitorGroup{{ID: 1, Name: "Prod"}}, AllTags: []*storage.Tag{{ID: 1, Name: "prod", Color: "#fff"}}}),
 		"monitor-detail": MonitorDetailPage(MonitorDetailParams{LayoutParams: lp("API"), Monitor: m, Checks: paged([]*storage.CheckResult{{Status: "up", CreatedAt: time.Now()}}), SLA: &SLAData{Target: 99.9, BudgetTotalSecs: 100, BudgetRemainSecs: 50}}),
-		"monitor-form":   MonitorFormPage(MonitorFormParams{LayoutParams: lp("New Monitor"), Monitor: &storage.Monitor{}, HeadersJSON: "[]", WsHeadersJSON: "[]", AssertionsJSON: `{"operator":"and","groups":[]}`, NotificationChannels: []*storage.NotificationChannel{ch}, AllTags: []*storage.Tag{{ID: 1, Name: "prod", Color: "#fff"}}}),
-		"incidents":      IncidentListPage(IncidentListParams{LayoutParams: lp("Incidents"), Result: paged([]*storage.Incident{inc})}),
-		"incident":       IncidentDetailPage(IncidentDetailParams{LayoutParams: lp("Incident #1"), Incident: inc, Events: []*storage.IncidentEvent{{Type: "created", Message: "opened", CreatedAt: time.Now()}}}),
-		"groups":         GroupListPage(GroupListParams{LayoutParams: lp("Groups"), Groups: []*storage.MonitorGroup{{ID: 1, Name: "Prod"}}}),
-		"group":          GroupDetailPage(GroupDetailParams{LayoutParams: lp("Prod"), Group: &storage.MonitorGroup{ID: 1, Name: "Prod"}, Monitors: paged([]*storage.Monitor{m})}),
-		"tags":           TagListPage(TagListParams{LayoutParams: lp("Tags"), Tags: []*storage.Tag{{ID: 1, Name: "prod", Color: "#fff"}}}),
-		"notifications":  NotificationListPage(NotificationListParams{LayoutParams: lp("Notifications"), Channels: []*storage.NotificationChannel{ch}}),
-		"notif-history":  NotificationHistoryPage(NotificationHistoryParams{LayoutParams: lp("Notification History"), Channels: []*storage.NotificationChannel{ch}, Result: paged([]*storage.NotificationHistory{{ChannelName: "Ops", Status: "sent", EventType: "test", SentAt: time.Now()}})}),
-		"escalation":     EscalationPolicyListPage(EscalationPolicyListParams{LayoutParams: lp("Escalation Policies"), Channels: []*storage.NotificationChannel{ch}, Policies: []*storage.EscalationPolicy{{ID: 1, Name: "Default", Enabled: true}}}),
-		"oncall":         OnCallListPage(OnCallListParams{LayoutParams: lp("On-Call"), Channels: []*storage.NotificationChannel{ch}, Rotations: []*storage.OnCallRotation{{ID: 1, Name: "Primary", Period: "weekly", ChannelIDs: []int64{1}}}}),
-		"maintenance":    MaintenanceListPage(MaintenanceListParams{LayoutParams: lp("Maintenance"), Windows: []*storage.MaintenanceWindow{{ID: 1, Name: "Upgrade", StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)}}}),
-		"sla":            SLAReportPage(SLAReportParams{LayoutParams: lp("SLA Report"), Period: time.Now(), Entries: []*sla.ReportEntry{{MonitorID: 1, MonitorName: "API", Target: 99.9, UptimePct: 99.95, BudgetSecs: 100, RemainSecs: 60}}}),
-		"logs":           RequestLogListPage(RequestLogParams{LayoutParams: lp("Request Logs"), TimeRange: "24h", TopIPs: []string{"127.0.0.1"}, Stats: &storage.RequestLogStats{}, Result: paged([]*storage.RequestLog{{Method: "GET", Path: "/", StatusCode: 200, ClientIP: "127.0.0.1", RouteGroup: "web", CreatedAt: time.Now()}})}),
-		"audit":          AuditLogPage(AuditLogParams{LayoutParams: lp("Audit Log"), TimeRange: "24h", Result: paged([]*storage.AuditEntry{{Action: "create", Entity: "monitor", EntityID: 1, CreatedAt: time.Now()}})}),
-		"agents":         AgentListPage(AgentListParams{LayoutParams: lp("Agents"), ServerURL: "http://localhost", Agents: []*storage.Agent{{ID: 1, Name: "eu"}}, NewAgentName: "eu", NewAgentToken: "tok"}),
-		"proxies":        ProxyListPage(ProxyListParams{LayoutParams: lp("Proxies"), Proxies: []*storage.Proxy{{ID: 1, Name: "p", Protocol: "http", Host: "h", Port: 8080}}}),
-		"proxy-form":     ProxyFormPage(ProxyFormParams{LayoutParams: lp("Edit Proxy"), Proxy: &storage.Proxy{ID: 1, Name: "p", AuthUser: "u"}, PasswordStored: true}),
-		"status-pages":   StatusPageListPage(StatusPageListParams{LayoutParams: lp("Status Pages"), Pages: []*storage.StatusPage{{ID: 1, Title: "Status", Slug: "status", Enabled: true}}}),
-		"status-form":    StatusPageFormPage(StatusPageFormParams{LayoutParams: lp("Status Page"), Monitors: []*storage.Monitor{m}, Assigned: map[int64]bool{}, AssignedData: map[int64]storage.StatusPageMonitor{}}),
-		"settings":       SettingsPage(SettingsParams{LayoutParams: lp("Settings")}),
-		"login":          LoginPage(LoginParams{Error: "bad key"}),
-		"totp":           TOTPPage(TOTPParams{}),
-		"public":         PublicStatusPage(PublicStatusPageParams{Title: "Acme", Config: &storage.StatusPage{Slug: "status", ShowIncidents: true}, Overall: "operational", Monitors: []MonitorWithUptime{{Monitor: m, UptimeLabel: "100%"}}, Incidents: []*storage.Incident{inc}, HasIncidents: true, SubscriptionsEnabled: true}),
-		"public-auth":    StatusPageAuthPage(StatusPageAuthParams{Title: "Acme", Slug: "status"}),
+		"monitor-detail-heartbeat": MonitorDetailPage(MonitorDetailParams{LayoutParams: lp("Cron"), Monitor: fixtureHeartbeatMonitor(), Checks: paged([]*storage.CheckResult{}),
+			Heartbeat: &HeartbeatView{ServerURL: "https://mon.example.com", Exists: true, Status: "up", Grace: 30, LastPingAt: &now, NewToken: "0123abcd"}}),
+		"monitor-detail-heartbeat-no-url": MonitorDetailPage(MonitorDetailParams{LayoutParams: lp("Cron"), Monitor: fixtureHeartbeatMonitor(), Checks: paged([]*storage.CheckResult{}),
+			Heartbeat: &HeartbeatView{ServerURL: "https://mon.example.com"}}),
+		"monitor-form":  MonitorFormPage(MonitorFormParams{LayoutParams: lp("New Monitor"), Monitor: &storage.Monitor{}, HeadersJSON: "[]", WsHeadersJSON: "[]", AssertionsJSON: `{"operator":"and","groups":[]}`, NotificationChannels: []*storage.NotificationChannel{ch}, AllTags: []*storage.Tag{{ID: 1, Name: "prod", Color: "#fff"}}}),
+		"incidents":     IncidentListPage(IncidentListParams{LayoutParams: lp("Incidents"), Result: paged([]*storage.Incident{inc})}),
+		"incident":      IncidentDetailPage(IncidentDetailParams{LayoutParams: lp("Incident #1"), Incident: inc, Events: []*storage.IncidentEvent{{Type: "created", Message: "opened", CreatedAt: time.Now()}}}),
+		"groups":        GroupListPage(GroupListParams{LayoutParams: lp("Groups"), Groups: []*storage.MonitorGroup{{ID: 1, Name: "Prod"}}}),
+		"group":         GroupDetailPage(GroupDetailParams{LayoutParams: lp("Prod"), Group: &storage.MonitorGroup{ID: 1, Name: "Prod"}, Monitors: paged([]*storage.Monitor{m})}),
+		"tags":          TagListPage(TagListParams{LayoutParams: lp("Tags"), Tags: []*storage.Tag{{ID: 1, Name: "prod", Color: "#fff"}}}),
+		"notifications": NotificationListPage(NotificationListParams{LayoutParams: lp("Notifications"), Channels: []*storage.NotificationChannel{ch}}),
+		"notif-history": NotificationHistoryPage(NotificationHistoryParams{LayoutParams: lp("Notification History"), Channels: []*storage.NotificationChannel{ch}, Result: paged([]*storage.NotificationHistory{{ChannelName: "Ops", Status: "sent", EventType: "test", SentAt: time.Now()}})}),
+		"escalation":    EscalationPolicyListPage(EscalationPolicyListParams{LayoutParams: lp("Escalation Policies"), Channels: []*storage.NotificationChannel{ch}, Policies: []*storage.EscalationPolicy{{ID: 1, Name: "Default", Enabled: true}}}),
+		"oncall":        OnCallListPage(OnCallListParams{LayoutParams: lp("On-Call"), Channels: []*storage.NotificationChannel{ch}, Rotations: []*storage.OnCallRotation{{ID: 1, Name: "Primary", Period: "weekly", ChannelIDs: []int64{1}}}}),
+		"maintenance":   MaintenanceListPage(MaintenanceListParams{LayoutParams: lp("Maintenance"), Windows: []*storage.MaintenanceWindow{{ID: 1, Name: "Upgrade", StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)}}}),
+		"sla":           SLAReportPage(SLAReportParams{LayoutParams: lp("SLA Report"), Period: time.Now(), Entries: []*sla.ReportEntry{{MonitorID: 1, MonitorName: "API", Target: 99.9, UptimePct: 99.95, BudgetSecs: 100, RemainSecs: 60}}}),
+		"logs":          RequestLogListPage(RequestLogParams{LayoutParams: lp("Request Logs"), TimeRange: "24h", TopIPs: []string{"127.0.0.1"}, Stats: &storage.RequestLogStats{}, Result: paged([]*storage.RequestLog{{Method: "GET", Path: "/", StatusCode: 200, ClientIP: "127.0.0.1", RouteGroup: "web", CreatedAt: time.Now()}})}),
+		"audit":         AuditLogPage(AuditLogParams{LayoutParams: lp("Audit Log"), TimeRange: "24h", Result: paged([]*storage.AuditEntry{{Action: "create", Entity: "monitor", EntityID: 1, CreatedAt: time.Now()}})}),
+		"agents":        AgentListPage(AgentListParams{LayoutParams: lp("Agents"), ServerURL: "http://localhost", Agents: []*storage.Agent{{ID: 1, Name: "eu"}}, NewAgentName: "eu", NewAgentToken: "tok"}),
+		"proxies":       ProxyListPage(ProxyListParams{LayoutParams: lp("Proxies"), Proxies: []*storage.Proxy{{ID: 1, Name: "p", Protocol: "http", Host: "h", Port: 8080}}}),
+		"proxy-form":    ProxyFormPage(ProxyFormParams{LayoutParams: lp("Edit Proxy"), Proxy: &storage.Proxy{ID: 1, Name: "p", AuthUser: "u"}, PasswordStored: true}),
+		"status-pages":  StatusPageListPage(StatusPageListParams{LayoutParams: lp("Status Pages"), Pages: []*storage.StatusPage{{ID: 1, Title: "Status", Slug: "status", Enabled: true}}}),
+		"status-form":   StatusPageFormPage(StatusPageFormParams{LayoutParams: lp("Status Page"), Monitors: []*storage.Monitor{m}, Assigned: map[int64]bool{}, AssignedData: map[int64]storage.StatusPageMonitor{}}),
+		"settings":      SettingsPage(SettingsParams{LayoutParams: lp("Settings")}),
+		"login":         LoginPage(LoginParams{Error: "bad key"}),
+		"totp":          TOTPPage(TOTPParams{}),
+		"public":        PublicStatusPage(PublicStatusPageParams{Title: "Acme", Config: &storage.StatusPage{Slug: "status", ShowIncidents: true}, Overall: "operational", Monitors: []MonitorWithUptime{{Monitor: m, UptimeLabel: "100%"}}, Incidents: []*storage.Incident{inc}, HasIncidents: true, SubscriptionsEnabled: true}),
+		"public-auth":   StatusPageAuthPage(StatusPageAuthParams{Title: "Acme", Slug: "status"}),
 	}
 }
 
@@ -287,5 +296,61 @@ func TestReadOnlyPagesHideWriteActions(t *testing.T) {
 				t.Errorf("%s: read-only page links to write action %s", name, marker)
 			}
 		}
+	}
+}
+
+func renderString(t *testing.T, c templ.Component) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := c.Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+func TestHeartbeatPanel(t *testing.T) {
+	base := MonitorDetailParams{LayoutParams: testLayout("Cron", true), Monitor: fixtureHeartbeatMonitor(), Checks: &storage.PaginatedResult{}}
+
+	revealed := base
+	revealed.Heartbeat = &HeartbeatView{ServerURL: "https://mon.example.com/asura", Exists: true, Status: "pending", Grace: 30, NewToken: "0123abcd"}
+	out := renderString(t, MonitorDetailPage(revealed))
+	for _, want := range []string{
+		"https://mon.example.com/asura/api/v1/heartbeat/0123abcd",
+		"curl -fsS -m 10 --retry 3 https://mon.example.com/asura/api/v1/heartbeat/0123abcd",
+		"It is not shown again",
+		"Expects a ping every 3600s, plus 30s grace.",
+		`id="heartbeat-reveal" hx-preserve="true"`,
+		"Regenerate URL",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("revealed panel is missing %q", want)
+		}
+	}
+
+	stored := base
+	stored.Heartbeat = &HeartbeatView{ServerURL: "https://mon.example.com", Exists: true, Status: "up"}
+	out = renderString(t, MonitorDetailPage(stored))
+	if strings.Contains(out, "/api/v1/heartbeat/") {
+		t.Error("panel shows a ping URL without a freshly created token")
+	}
+	// The empty placeholder must still be there so a refresh keeps a shown URL.
+	if !strings.Contains(out, `id="heartbeat-reveal" hx-preserve="true"`) {
+		t.Error("reveal placeholder missing; an auto-refresh would drop a shown URL")
+	}
+	if !strings.Contains(out, "Last ping:") || !strings.Contains(out, "never") {
+		t.Error("panel does not say the monitor was never pinged")
+	}
+
+	missing := base
+	missing.Heartbeat = &HeartbeatView{ServerURL: "https://mon.example.com"}
+	out = renderString(t, MonitorDetailPage(missing))
+	if !strings.Contains(out, "Generate URL") || strings.Contains(out, "Regenerate URL") {
+		t.Error("monitor without a token should offer Generate URL only")
+	}
+
+	readOnly := missing
+	readOnly.LayoutParams = testLayout("Cron", false)
+	if out := renderString(t, MonitorDetailPage(readOnly)); strings.Contains(out, "Generate URL") {
+		t.Error("read-only user is offered Generate URL")
 	}
 }

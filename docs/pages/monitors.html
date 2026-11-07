@@ -210,22 +210,41 @@ sudo systemctl restart asura</code></pre>
 
 <p>Create a heartbeat monitor to track cron jobs, workers, or pipelines. If they stop pinging, Asura fires an incident.</p>
 
+<h3>From the web UI</h3>
+
+<p>Choose <strong>Heartbeat (push)</strong> as the type, set <strong>Expect a ping every</strong> and an optional <strong>Grace period</strong>, and save. The monitor page then shows the ping URL with a copy button and an example <code>curl</code> command.</p>
+
+<p>The ping URL contains a secret token. Asura stores only a hash of it, so <strong>the URL is shown once</strong>, right after the monitor is created or cloned. Copy it then. If you lose it, use <strong>Regenerate URL</strong> on the monitor page: you get a new URL and the old one stops working at once. The URL is built from <code>server.external_url</code>; set it when Asura runs behind a reverse proxy, or the URL shows the internal listen address.</p>
+
+<p>A heartbeat monitor that has no ping URL yet (for example one created by an older version from the web UI, imported, or changed to the heartbeat type by an edit) shows <strong>Generate URL</strong> instead.</p>
+
+<h3>From the API</h3>
+
 <pre><code># Create heartbeat monitor
 curl -X POST https://example.com/asura/api/v1/monitors \
   -H "X-API-Key: $KEY" \
   -H "Content-Type: application/json" \
   -d '{"name":"Nightly Backup","type":"heartbeat","interval":3600,"settings":{"grace":300}}'</code></pre>
 
-<p>Response includes the ping token:</p>
+<p>The response includes the ping token. Like agent tokens, it is returned only here (and by clone and regenerate), never by <code>GET</code>:</p>
 
 <pre><code>{
   "monitor": { "id": 1, "name": "Nightly Backup", "type": "heartbeat", ... },
-  "heartbeat": { "token": "a1b2c3d4e5f6...", "grace": 300, "status": "pending" }
+  "heartbeat": { "id": 1, "monitor_id": 1, "token": "a1b2c3d4e5f6...", "grace": 300, "status": "pending" }
 }</code></pre>
 
-<p>Ping from your script (no auth needed):</p>
+<p>Ping from your script with <code>GET</code> or <code>POST</code> (no auth needed). The URL is your Asura base URL followed by <code>/api/v1/heartbeat/&lt;token&gt;</code>:</p>
 
-<pre><code>curl -X POST https://example.com/asura/api/v1/heartbeat/a1b2c3d4e5f6...</code></pre>
+<pre><code>curl -fsS -m 10 --retry 3 https://example.com/asura/api/v1/heartbeat/a1b2c3d4e5f6...</code></pre>
+
+<p>To replace a lost or leaked token (the old one stops working immediately; status and last ping are kept). This also creates the first token for a heartbeat monitor that has none:</p>
+
+<pre><code>curl -X POST https://example.com/asura/api/v1/monitors/1/heartbeat/regenerate \
+  -H "X-API-Key: $KEY"</code></pre>
+
+<pre><code>{ "heartbeat": { "id": 1, "monitor_id": 1, "token": "f6e5d4c3b2a1...", "grace": 300, "status": "up", "last_ping_at": "..." } }</code></pre>
+
+<p>Changing a heartbeat monitor to another type deletes its token. Changing a monitor to the heartbeat type does not create one; call regenerate to get it.</p>
 
 <p>If no ping arrives within <code>interval + grace</code> seconds, the monitor goes down and an incident is created.</p>
 
