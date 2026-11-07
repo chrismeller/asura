@@ -70,6 +70,8 @@ type Store interface {
 
 	// Heartbeats
 	CreateHeartbeat(ctx context.Context, h *Heartbeat) error
+	SetHeartbeatToken(ctx context.Context, monitorID int64, token string, grace int) error
+	UpdateHeartbeatGrace(ctx context.Context, monitorID int64, grace int) error
 	GetHeartbeatByToken(ctx context.Context, token string) (*Heartbeat, error)
 	GetHeartbeatByMonitorID(ctx context.Context, monitorID int64) (*Heartbeat, error)
 	UpdateHeartbeatPing(ctx context.Context, token string) error

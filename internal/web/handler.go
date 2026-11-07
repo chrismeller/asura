@@ -32,7 +32,7 @@ type Handler struct {
 	totpMu             sync.Mutex
 	totpChallenges     map[string]*totpChallenge
 	revealMu           sync.Mutex
-	agentReveals       map[string]agentReveal
+	reveals            map[string]secretReveal
 	done               chan struct{}
 }
 

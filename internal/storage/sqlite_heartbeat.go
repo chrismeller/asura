@@ -18,6 +18,25 @@ func (s *SQLiteStore) CreateHeartbeat(ctx context.Context, h *Heartbeat) error {
 	return nil
 }
 
+// SetHeartbeatToken gives a monitor a new heartbeat token, creating its
+// heartbeat row if it has none. An existing row keeps its status and last ping,
+// so replacing the token never hides an open incident or a missed ping.
+func (s *SQLiteStore) SetHeartbeatToken(ctx context.Context, monitorID int64, token string, grace int) error {
+	_, err := s.writeDB.ExecContext(ctx,
+		`INSERT INTO heartbeats (monitor_id, token, grace, status) VALUES (?, ?, ?, 'pending')
+		 ON CONFLICT(monitor_id) DO UPDATE SET token=excluded.token, grace=excluded.grace`,
+		monitorID, sha256Hex(token), grace)
+	return err
+}
+
+// UpdateHeartbeatGrace sets a monitor's grace period. It is a no-op for a
+// monitor without a heartbeat row.
+func (s *SQLiteStore) UpdateHeartbeatGrace(ctx context.Context, monitorID int64, grace int) error {
+	_, err := s.writeDB.ExecContext(ctx,
+		`UPDATE heartbeats SET grace=? WHERE monitor_id=?`, grace, monitorID)
+	return err
+}
+
 func (s *SQLiteStore) GetHeartbeatByToken(ctx context.Context, token string) (*Heartbeat, error) {
 	var h Heartbeat
 	var lastPing sql.NullString

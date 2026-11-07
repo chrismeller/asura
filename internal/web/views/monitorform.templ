@@ -25,6 +25,7 @@ type MonitorFormParams struct {
 	Redis                storage.RedisSettings
 	PostgreSQL           storage.PostgreSQLSettings
 	UDP                  storage.UDPSettings
+	Heartbeat            storage.HeartbeatSettings
 	MultiStep            storage.MultiStepHTTPSettings
 	FollowRedirects      bool
 	MaxRedirects         int
@@ -250,29 +251,37 @@ templ MonitorFormPage(p MonitorFormParams) {
 						</div>
 					</div>
 				</div>
-				<div x-show="monitorType !== 'heartbeat' && monitorType !== 'manual'" x-cloak>
+				<div x-show="monitorType !== 'manual'" x-cloak>
 					<div class="card card-pad">
 						<h2 class="text-lg font-semibold mb-4">Schedule</h2>
 						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 							<div>
-								<label class="form-label" for="interval">Check every</label>
+								<label class="form-label" for="interval" x-text="monitorType === 'heartbeat' ? 'Expect a ping every' : 'Check every'">Check every</label>
 								<div class="relative">
 									<input id="interval" type="number" name="interval" value={ intOrDefault(p.Monitor.Interval, 60) } min="5" max="86400" class="form-input tabular-nums pr-10"/>
 									<span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-light">sec</span>
 								</div>
 							</div>
-							<div>
+							<div x-show="monitorType === 'heartbeat'" x-cloak>
+								<label class="form-label" for="settings_heartbeat_grace">Grace period</label>
+								<div class="relative">
+									<input id="settings_heartbeat_grace" type="number" name="settings_heartbeat_grace" value={ fmt.Sprint(p.Heartbeat.Grace) } min="0" max="86400" class="form-input tabular-nums pr-10"/>
+									<span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-light">sec</span>
+								</div>
+								<p class="form-hint">How late a ping may be before the monitor goes down.</p>
+							</div>
+							<div x-show="monitorType !== 'heartbeat'">
 								<label class="form-label" for="timeout">Timeout after</label>
 								<div class="relative">
 									<input id="timeout" type="number" name="timeout" value={ intOrDefault(p.Monitor.Timeout, 10) } min="1" max="300" class="form-input tabular-nums pr-10"/>
 									<span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-light">sec</span>
 								</div>
 							</div>
-							<div>
+							<div x-show="monitorType !== 'heartbeat'">
 								<label class="form-label" for="failure_threshold">Failures before alert</label>
 								<input id="failure_threshold" type="number" name="failure_threshold" value={ intOrDefault(p.Monitor.FailureThreshold, 3) } min="1" class="form-input tabular-nums"/>
 							</div>
-							<div>
+							<div x-show="monitorType !== 'heartbeat'">
 								<label class="form-label" for="success_threshold">Successes to recover</label>
 								<input id="success_threshold" type="number" name="success_threshold" value={ intOrDefault(p.Monitor.SuccessThreshold, 1) } min="1" class="form-input tabular-nums"/>
 							</div>

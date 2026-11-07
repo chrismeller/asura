@@ -63,6 +63,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 		mux.Handle("POST "+s.p("/monitors/{id}/pause"), webPerm("monitors.write", s.web.MonitorPause))
 		mux.Handle("POST "+s.p("/monitors/{id}/resume"), webPerm("monitors.write", s.web.MonitorResume))
 		mux.Handle("POST "+s.p("/monitors/{id}/clone"), webPerm("monitors.write", s.web.MonitorClone))
+		mux.Handle("POST "+s.p("/monitors/{id}/heartbeat/regenerate"), webPerm("monitors.write", s.web.MonitorRegenerateHeartbeat))
 		mux.Handle("POST "+s.p("/monitors/{id}/status"), webPerm("monitors.write", s.web.MonitorSetManualStatus))
 		mux.Handle("POST "+s.p("/monitors/bulk"), webPerm("monitors.write", s.web.MonitorBulk))
 		mux.Handle("GET "+s.p("/monitors/{id}/chart"), webAuth(http.HandlerFunc(s.api.MonitorChart)))
@@ -180,6 +181,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+s.p("/api/v1/monitors/{id}/pause"), monWrite(http.HandlerFunc(s.api.PauseMonitor)))
 	mux.Handle("POST "+s.p("/api/v1/monitors/{id}/resume"), monWrite(http.HandlerFunc(s.api.ResumeMonitor)))
 	mux.Handle("POST "+s.p("/api/v1/monitors/{id}/clone"), monWrite(http.HandlerFunc(s.api.CloneMonitor)))
+	mux.Handle("POST "+s.p("/api/v1/monitors/{id}/heartbeat/regenerate"), monWrite(http.HandlerFunc(s.api.RegenerateHeartbeatToken)))
 	mux.Handle("POST "+s.p("/api/v1/monitors/{id}/status"), monWrite(http.HandlerFunc(s.api.SetManualStatus)))
 	mux.Handle("POST "+s.p("/api/v1/monitors/bulk"), monWrite(http.HandlerFunc(s.api.BulkMonitors)))
 

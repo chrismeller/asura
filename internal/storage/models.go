@@ -314,9 +314,12 @@ type PaginatedResult struct {
 
 // Heartbeat tracks a heartbeat monitor's ping state.
 type Heartbeat struct {
-	ID         int64      `json:"id"`
-	MonitorID  int64      `json:"monitor_id"`
-	Token      string     `json:"token"`
+	ID        int64 `json:"id"`
+	MonitorID int64 `json:"monitor_id"`
+	// Token is the plaintext token when the heartbeat was just created, and
+	// the stored sha256 hash when read back. It is never serialized; the API
+	// returns a fresh token explicitly where it can be shown.
+	Token      string     `json:"-"`
 	Grace      int        `json:"grace"` // grace period in seconds
 	LastPingAt *time.Time `json:"last_ping_at,omitempty"`
 	Status     string     `json:"status"` // up, down, pending
