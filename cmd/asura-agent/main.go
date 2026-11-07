@@ -52,6 +52,7 @@ func main() {
 	interval := flag.Duration("interval", 30*time.Second, "Poll interval")
 	concurrency := flag.Int("concurrency", 10, "Maximum number of checks run at the same time")
 	allowPrivate := flag.Bool("allow-private", false, "Allow checks against private, loopback and other reserved addresses")
+	cacheDir := flag.String("cache-dir", "", "Directory for cached lookup data, such as the RDAP bootstrap file (default: memory only)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -67,7 +68,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	a := newAgent(&http.Client{Timeout: 30 * time.Second}, strings.TrimRight(*serverURL, "/"), *token,
-		checker.DefaultRegistry(nil, *allowPrivate), logger)
+		checker.DefaultRegistry(nil, *allowPrivate, checker.WithCacheDir(*cacheDir), checker.WithLogger(logger)), logger)
 	a.concurrency = *concurrency
 
 	logger.Info("starting asura-agent", "version", version, "server", a.server, "interval", interval.String(),

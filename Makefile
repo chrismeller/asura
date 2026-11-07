@@ -5,7 +5,7 @@ GOFLAGS  := -trimpath
 
 TAILWIND := ./tailwindcss
 
-.PHONY: all build css watch dev test lint run clean hash-key release generate agent
+.PHONY: all build css watch dev test lint run clean hash-key release generate agent rdap-bootstrap
 
 all: build
 
@@ -41,6 +41,14 @@ clean:
 hash-key:
 	@read -p "Enter API key: " key; \
 	go run ./cmd/asura -hash-key "$$key"
+
+# Refresh the RDAP bootstrap snapshot built into the binary. It is only a
+# fallback for first runs and offline hosts: running instances fetch the live
+# file themselves.
+rdap-bootstrap:
+	curl -fsSL --max-time 30 -o internal/checker/rdap_bootstrap.json.tmp https://data.iana.org/rdap/dns.json
+	grep -q '"services"' internal/checker/rdap_bootstrap.json.tmp
+	mv internal/checker/rdap_bootstrap.json.tmp internal/checker/rdap_bootstrap.json
 
 agent:
 	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o asura-agent ./cmd/asura-agent

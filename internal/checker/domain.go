@@ -17,6 +17,9 @@ import (
 
 type DomainChecker struct {
 	AllowPrivate bool
+
+	// rdapBootstrap finds the RDAP server for a TLD. Not yet used by Check.
+	rdapBootstrap *rdapBootstrap
 }
 
 func (c *DomainChecker) Type() string { return "domain" }

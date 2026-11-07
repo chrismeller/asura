@@ -1,0 +1,4 @@
+{
+  "description": "Placeholder: run `make rdap-bootstrap` to replace this with IANA's RDAP bootstrap file (https://data.iana.org/rdap/dns.json).",
+  "services": []
+}

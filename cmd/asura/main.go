@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -100,7 +101,11 @@ func main() {
 
 	purgeStaleSessionsOnStartup(ctx, store, cfg, logger)
 
-	registry := checker.DefaultRegistry(cfg.Monitor.CommandAllowlist, cfg.Monitor.AllowPrivateTargets)
+	// Cached lookup data lives next to the database: that directory is the
+	// one guaranteed to be writable and persistent (the Docker data volume,
+	// systemd's ReadWritePaths).
+	registry := checker.DefaultRegistry(cfg.Monitor.CommandAllowlist, cfg.Monitor.AllowPrivateTargets,
+		checker.WithCacheDir(filepath.Dir(cfg.Database.Path)), checker.WithLogger(logger))
 	incMgr := incident.NewManager(store, logger)
 	pipeline := monitor.NewPipeline(store, registry, incMgr, cfg.Monitor.Workers, cfg.Monitor.AdaptiveIntervals, logger)
 	dispatcher := notifier.NewDispatcher(store, logger, cfg.Monitor.AllowPrivateTargets)

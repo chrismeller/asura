@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/y0f/asura/internal/storage"
@@ -56,8 +57,35 @@ func (r *Registry) Get(typ string) (Checker, error) {
 	return c, nil
 }
 
-// DefaultRegistry creates a registry with all built-in checkers.
-func DefaultRegistry(commandAllowlist []string, allowPrivateTargets bool) *Registry {
+// RegistryOption configures DefaultRegistry.
+type RegistryOption func(*registryOptions)
+
+type registryOptions struct {
+	cacheDir string
+	logger   *slog.Logger
+}
+
+// WithCacheDir sets the directory where checkers may save data that should
+// survive a restart, such as the RDAP bootstrap file. Without it, such data
+// is kept in memory only.
+func WithCacheDir(dir string) RegistryOption {
+	return func(o *registryOptions) { o.cacheDir = dir }
+}
+
+// WithLogger sets the logger checkers use for background housekeeping, such
+// as failed cache refreshes. Without it, those messages are discarded.
+func WithLogger(logger *slog.Logger) RegistryOption {
+	return func(o *registryOptions) { o.logger = logger }
+}
+
+// DefaultRegistry creates a registry with all built-in checkers. It does no
+// I/O: caches are loaded the first time a check needs them.
+func DefaultRegistry(commandAllowlist []string, allowPrivateTargets bool, opts ...RegistryOption) *Registry {
+	var o registryOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	r := NewRegistry()
 	r.Register(&HTTPChecker{AllowPrivate: allowPrivateTargets})
 	r.Register(&TCPChecker{AllowPrivate: allowPrivateTargets})
@@ -67,7 +95,10 @@ func DefaultRegistry(commandAllowlist []string, allowPrivateTargets bool) *Regis
 	r.Register(&WebSocketChecker{AllowPrivate: allowPrivateTargets})
 	r.Register(&CommandChecker{Allowlist: commandAllowlist})
 	r.Register(&DockerChecker{})
-	r.Register(&DomainChecker{AllowPrivate: allowPrivateTargets})
+	r.Register(&DomainChecker{
+		AllowPrivate:  allowPrivateTargets,
+		rdapBootstrap: newRDAPBootstrap(o.cacheDir, allowPrivateTargets, o.logger),
+	})
 	r.Register(&GRPCChecker{AllowPrivate: allowPrivateTargets})
 	r.Register(&MQTTChecker{AllowPrivate: allowPrivateTargets})
 	r.Register(&SMTPChecker{AllowPrivate: allowPrivateTargets})
